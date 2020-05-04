@@ -26,14 +26,14 @@ namespace OpenRPC
     {
         public string Name { get; set; }
         public string Description { get; set; }
-        public bool? ParamRequired { get; set; }
+        public bool? Required { get; set; }
         public ParamSchema Schema { get; set; }
     }
 
     public partial class ParamSchema
     {
         public string Type { get; set; }
-        public Error Items { get; set; }
+        public JObject Items { get; set; }
     }
 
     public partial class Result
@@ -47,15 +47,4 @@ namespace OpenRPC
         public string Type { get; set; }
         public JToken Properties { get; set; }
     }
-
-    public partial class Properties
-    {
-        public QReturn QReturn { get; set; }
-    }
-
-    public partial class QReturn
-    {
-        public string Type { get; set; }
-    }
-
 }

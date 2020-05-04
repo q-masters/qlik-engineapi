@@ -605,10 +605,11 @@ namespace QlikApiParser
                         {
                             Name = param.Name,
                             Description = param.Description,
-                            Required = param.ParamRequired ?? true,
+                            Required = param.Required ?? false,
+                            Type = param.Schema.Type,
+                            Items = param.Schema.Items
                             //  Schema = param.Schema
-
-
+                           
                         };
                         engineMethod.Parameters.Add(engParm);
                     }
@@ -636,7 +637,7 @@ namespace QlikApiParser
                     //}
 
                     //T version from original
-                    if (scriptLang == ScriptLanguage.CSharp)
+                    if (false &&  scriptLang == ScriptLanguage.CSharp)
                     {
                         var jsonMethod = CreateMethodClone(engineMethod);
                         jsonMethod.UseGeneric = true;
