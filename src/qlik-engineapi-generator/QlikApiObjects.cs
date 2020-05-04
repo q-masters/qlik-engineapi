@@ -59,7 +59,10 @@ namespace QlikApiParser
                 NamingStrategyType = typeof(CamelCaseNamingStrategy))]
     public class EngineMethod : EngineBase
     {
+        [JsonProperty(PropertyName = "params")]
         public List<EngineParameter> Parameters { get; set; } = new List<EngineParameter>();
+
+        [JsonProperty(PropertyName = "result")]
         public List<EngineResponse> Responses { get; set; } = new List<EngineResponse>();
         public bool UseGeneric { get; set; } = false;
 

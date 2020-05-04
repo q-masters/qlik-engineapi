@@ -291,6 +291,11 @@ namespace QlikApiParser
         private List<EngineEnumValue> GetEnumValues(JArray items)
         {
             var results = new List<EngineEnumValue>();
+            if (items == null)
+            {
+                logger.Error($"The method {nameof(GetEnumValues)} failed. Because items is empty");
+                return results;
+            }
             try
             {
                 foreach (var item in items)
@@ -562,92 +567,111 @@ namespace QlikApiParser
 
         private void AddMethods(JObject mergeObject)
         {
+            Dictionary<string, EngineInterface> eIntfaces = new Dictionary<string, EngineInterface>();
             try
             {
-                var classes = mergeObject.SelectToken("x-qlik-services") as JObject;
-                foreach (var child in classes.Children())
+                var methods = mergeObject.SelectToken("methods") as JArray;
+
+                //    logger.Debug($"Interface name: {jProperty.Name}");
+                //    dynamic jObject = subChild as JObject;
+                //    var export = jObject?.export?.ToObject<bool>() ?? true;
+                //    if (!export)
+                //        continue;
+
+                foreach (var item in methods)
                 {
-                    var jProperty = child as JProperty;
-                    foreach (var subChild in child.Children())
+                    var rpcMethod = item.ToObject<OpenRPC.Method>();
+
+                    var interfaceName = (rpcMethod.Name).Split(new char[] { '.' })[0];
+                    rpcMethod.Name = (rpcMethod.Name).Split(new char[] { '.' })[1];
+
+                    logger.Debug($"Method name: {rpcMethod.Name}");
+
+                    if (!eIntfaces.ContainsKey(interfaceName))
+                        eIntfaces.Add(interfaceName, new EngineInterface() { Name = interfaceName });
+
+                    var engineInterface = eIntfaces[interfaceName];
+
+                    var engineMethod = new EngineMethod()
                     {
-                        logger.Debug($"Interface name: {jProperty.Name}");
-                        dynamic jObject = subChild as JObject;
-                        var export = jObject?.export?.ToObject<bool>() ?? true;
-                        if (!export)
-                            continue;
+                        Name = rpcMethod.Name,
+                        Description = rpcMethod.Description,
+                        SeeAlso = rpcMethod.XQlikSeeAlso
+                    };
 
-                        var engineInterface = jObject.ToObject<EngineInterface>();
-                        engineInterface.Name = $"I{jProperty.Name}";
-                        EngineObjects.Add(engineInterface);
-                        IEnumerable<JToken> methods = jObject?.methods?.Children() ?? null;
-                        if (methods != null)
+                    foreach (var param in rpcMethod.Params)
+                    {
+                        var engParm = new EngineParameter()
                         {
-                            foreach (var method in methods)
+                            Name = param.Name,
+                            Description = param.Description,
+                            Required = param.ParamRequired ?? true,
+                            //  Schema = param.Schema
+
+
+                        };
+                        engineMethod.Parameters.Add(engParm);
+                    }
+
+                    foreach (var para in engineMethod.Parameters)
+                    {
+                        if (para.Default != null && para.Type == "string" && para.Items != null)
+                            para.Default = $"{para.GetEnumType()}.{para.Default}";
+
+                        para.Type = para.GetRealType(ScriptLanguage.CSharp);
+                    }
+
+                    engineInterface.Methods.Add(engineMethod);
+
+                    var deletePropertys = engineMethod.Responses.Where(i => i.Delete == true).ToList();
+                    for (int i = deletePropertys.Count - 1; i >= 0; i--)
+                        engineMethod.Responses.Remove(deletePropertys[i]);
+
+                    //Check reponse for the presence of property "x-qlik-service"
+                    //foreach (var response in engineMethod.Responses)
+                    //{
+                    //    var objectInterface = response?.Schema?.ToString()?.EndsWith("/ObjectInterface") ?? false;
+                    //    //   if (objectInterface && response.XQlikService == null)
+                    //    //       logger.Warn($"The interface {engineInterface.Name} has a method {methodProp.Name} which has no x-qlik-service as the return value.");
+                    //}
+
+                    //T version from original
+                    if (scriptLang == ScriptLanguage.CSharp)
+                    {
+                        var jsonMethod = CreateMethodClone(engineMethod);
+                        jsonMethod.UseGeneric = true;
+                        engineInterface.Methods.Add(jsonMethod);
+
+                        if (engineMethod.Parameters.Count > 0)
+                        {
+                            // Add a JObject version as parameter
+                            jsonMethod = CreateMethodClone(engineMethod);
+                            jsonMethod.Parameters.Clear();
+                            jsonMethod.Parameters.Add(new EngineParameter()
                             {
-                                var methodProp = method as JProperty;
-                                logger.Debug($"Method name: {methodProp.Name}");
-                                var engineMethod = method.First.ToObject<EngineMethod>();
-                                engineMethod.Name = methodProp.Name;
+                                Name = "param",
+                                Type = "JObject",
+                                Required = true,
+                                Description = "Qlik Parameter as JSON object.",
+                            });
+                            engineInterface.Methods.Add(jsonMethod);
 
-                                if (method.First is JObject seeAlsoObject)
-                                    engineMethod.SeeAlso = GetValueFromProperty<List<string>>(seeAlsoObject, "x-qlik-see-also");
-                                foreach (var para in engineMethod.Parameters)
-                                {
-                                    if (para.Default != null && para.Type == "string" && para.Items != null)
-                                        para.Default = $"{para.GetEnumType()}.{para.Default}";
-
-                                    para.Type = para.GetRealType(ScriptLanguage.CSharp);
-                                }
-                                engineInterface.Methods.Add(engineMethod);
-
-                                var deletePropertys = engineMethod.Responses.Where(i => i.Delete == true).ToList();
-                                for (int i = deletePropertys.Count - 1; i >= 0; i--)
-                                    engineMethod.Responses.Remove(deletePropertys[i]);
-
-                                //Check reponse for the presence of property "x-qlik-service"
-                                foreach (var response in engineMethod.Responses)
-                                {
-                                    var objectInterface = response?.Schema?.ToString()?.EndsWith("/ObjectInterface") ?? false;
-                                    if (objectInterface && response.XQlikService == null)
-                                        logger.Warn($"The interface {engineInterface.Name} has a method {methodProp.Name} which has no x-qlik-service as the return value.");
-                                }
-
-                                //T version from original
-                                if (scriptLang == ScriptLanguage.CSharp)
-                                {
-                                    var jsonMethod = CreateMethodClone(engineMethod);
-                                    jsonMethod.UseGeneric = true;
-                                    engineInterface.Methods.Add(jsonMethod);
-
-                                    if (engineMethod.Parameters.Count > 0)
-                                    {
-                                        // Add a JObject version as parameter
-                                        jsonMethod = CreateMethodClone(engineMethod);
-                                        jsonMethod.Parameters.Clear();
-                                        jsonMethod.Parameters.Add(new EngineParameter()
-                                        {
-                                            Name = "param",
-                                            Type = "JObject",
-                                            Required = true,
-                                            Description = "Qlik Parameter as JSON object.",
-                                        });
-                                        engineInterface.Methods.Add(jsonMethod);
-
-                                        //T version from JObejct
-                                        jsonMethod = CreateMethodClone(jsonMethod);
-                                        jsonMethod.UseGeneric = true;
-                                        engineInterface.Methods.Add(jsonMethod);
-                                    }
-                                }
-                            }
+                            //T version from JObejct
+                            jsonMethod = CreateMethodClone(jsonMethod);
+                            jsonMethod.UseGeneric = true;
+                            engineInterface.Methods.Add(jsonMethod);
                         }
                     }
+
                 }
             }
             catch (Exception ex)
             {
                 logger.Error(ex, "The methods could not be added.");
             }
+
+            foreach (var item in eIntfaces.Values)
+                EngineObjects.Add(item);
         }
 
         private EngineMethod CreateMethodClone(EngineMethod currentMethod)

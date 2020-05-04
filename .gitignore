@@ -301,3 +301,4 @@ __pycache__/
 
 #user file
 /src/qlik-engineapi-generator/jsonrpcapi.json
+*.ts
